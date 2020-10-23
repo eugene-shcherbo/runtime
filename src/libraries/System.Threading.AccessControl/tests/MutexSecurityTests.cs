@@ -27,7 +27,7 @@ namespace System.Security.AccessControl
 
         [Theory]
         [MemberData(nameof(AccessRuleInvalidArguments))]
-        public void AccessRuleFactory_ThrowsException_WhenInvalidMutexRights(IdentityReference identity, MutexRights rights, AccessControlType accessType, Type exceptionType)
+        public void AccessRuleFactory_ThrowsException_WhenInvalidArguments(IdentityReference identity, MutexRights rights, AccessControlType accessType, Type exceptionType)
         {
             // Arrange
             var ms = new MutexSecurity();
@@ -55,21 +55,62 @@ namespace System.Security.AccessControl
             Assert.Equal(mutexRule.MutexRights, rights);
         }
 
+        [Fact]
+        public void AddAccessRule_ThrowsException_WhenRuleIsNull()
+        {
+            // Arrange
+            var ms = new MutexSecurity();
+
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() => ms.AddAccessRule(null));
+        }
+
+        [Theory]
+        [InlineData(MutexRights.FullControl, AccessControlType.Allow)]
+        [InlineData(MutexRights.FullControl, AccessControlType.Deny)]
+        [InlineData(MutexRights.Synchronize, AccessControlType.Allow)]
+        [InlineData(MutexRights.Synchronize, AccessControlType.Deny)]
+        [InlineData(MutexRights.Modify, AccessControlType.Allow)]
+        [InlineData(MutexRights.Modify, AccessControlType.Deny)]
+        [InlineData(MutexRights.ChangePermissions | MutexRights.Delete, AccessControlType.Allow)]
+        [InlineData(MutexRights.ChangePermissions | MutexRights.Delete, AccessControlType.Deny)]
+        public void AddAccessRule_AddSpecificRule(MutexRights rights, AccessControlType accessType)
+        {
+            // Arrange
+            var ms = new MutexSecurity();
+            var identity = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
+            var expcetedAccessRule = new MutexAccessRule(identity, rights, accessType);
+
+            // Act
+            ms.AddAccessRule(expcetedAccessRule);
+
+            // Assert
+            AuthorizationRuleCollection accessRules = ms.GetAccessRules(includeExplicit: true, includeInherited: false, identity.GetType());
+            Assert.Equal(1, accessRules.Count);
+            MutexAccessRule actualAccessRule = accessRules[0] as MutexAccessRule;
+            Assert.NotNull(actualAccessRule);
+            Assert.Equal(expcetedAccessRule.MutexRights, actualAccessRule.MutexRights);
+            Assert.Equal(expcetedAccessRule.IdentityReference, actualAccessRule.IdentityReference);
+            Assert.Equal(expcetedAccessRule.AccessControlType, actualAccessRule.AccessControlType);
+        }
+
+        // TODO: Test that merge works when rule is for the same user and with the same Access Control Type
+
         public static IEnumerable<object[]> AccessRuleValidArguments()
         {
-            var user = new NTAccount($"{Environment.UserDomainName}//{Environment.UserName}");
+            var identity = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
 
             return new []
             {
-                new object[] { user, MutexRights.ChangePermissions, AccessControlType.Allow },
-                new object[] { user, MutexRights.ChangePermissions | MutexRights.Delete, AccessControlType.Deny },
-                new object[] { user, MutexRights.FullControl, AccessControlType.Allow }
+                new object[] { identity, MutexRights.ChangePermissions, AccessControlType.Allow },
+                new object[] { identity, MutexRights.ChangePermissions | MutexRights.Delete, AccessControlType.Deny },
+                new object[] { identity, MutexRights.FullControl, AccessControlType.Allow }
             };
         }
 
         public static IEnumerable<object[]> AccessRuleInvalidArguments()
         {
-            var user = new NTAccount($"{Environment.UserDomainName}//{Environment.UserName}");
+            var identity = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
 
             return new[]
             {
@@ -77,10 +118,10 @@ namespace System.Security.AccessControl
                 new object[] { null, MutexRights.ChangePermissions, AccessControlType.Allow, typeof(ArgumentNullException) },
 
                 // MutexRights = 0 which is not valid
-                new object[] { user, 0, AccessControlType.Deny, typeof(ArgumentException) },
+                new object[] { identity, 0, AccessControlType.Deny, typeof(ArgumentException) },
 
                 // AccessControl is not valid enum value
-                new object[] { user, MutexRights.FullControl, -1, typeof(ArgumentOutOfRangeException) }
+                new object[] { identity, MutexRights.FullControl, -1, typeof(ArgumentOutOfRangeException) }
             };
         }
     }
